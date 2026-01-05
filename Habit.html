@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>HABIT TRACKER</title>
+
+<style>
+body {
+  background-color: #131a19;
+  font-family: Arial, sans-serif;
+  color: white;
+}
+
+h1, h2 { font-weight: bold; }
+
+.controls button {
+  background: #2ecc71;
+  border: none;
+  padding: 6px 12px;
+  margin-right: 5px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+button.remove { background: #e74c3c; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+th, td {
+  border: 1px solid #444;
+  padding: 6px;
+  text-align: center;
+  font-weight: bold;
+}
+
+td:nth-child(odd), th:nth-child(odd) { background:#1e1e1e; }
+td:nth-child(even), th:nth-child(even) { background:#323332; }
+
+input[type="text"], input[type="time"] {
+  background: transparent;
+  border: none;
+  color: white;
+  width: 100%;
+  font-weight: bold;
+}
+
+.done { background:#1f3d2b !important; }
+
+canvas {
+  background:#1e1e1e;
+  margin-top:10px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>HABIT TRACKER</h1>
+
+<div class="controls">
+  <button id="addRow">➕ Add Habit</button>
+  <button id="removeRow" class="remove">➖ Remove Habit</button>
+</div>
+
+<table id="tracker">
+<thead>
+<tr>
+  <th>Time</th>
+  <th>Task</th>
+  <th>Done</th>
+  <th>Streak 🔥</th>
+  <script>
+    for (let i = 1; i <= 30; i++) document.write(`<th>D${i}</th>`);
+  </script>
+</tr>
+</thead>
+<tbody id="tableBody"></tbody>
+</table>
+
+<div id="report" style="display:none;">
+  <h2>📊 Final 30-Day Report</h2>
+  <canvas id="pie" width="300" height="200"></canvas>
+  <canvas id="bar" width="500" height="250"></canvas>
+  <p id="summary"></p>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const body = document.getElementById("tableBody");
+  const addBtn = document.getElementById("addRow");
+  const removeBtn = document.getElementById("removeRow");
+
+  /* 🟢 START DATE LOGIC */
+  let startDate = localStorage.getItem("habitStartDate");
+  if (!startDate) {
+    startDate = new Date().toISOString().split("T")[0];
+    localStorage.setItem("habitStartDate", startDate);
+  }
+
+  const start = new Date(startDate);
+  const today = new Date();
+  const diffDays = Math.floor((today - start) / (1000 * 60 * 60 * 24));
+  const currentDay = diffDays + 1;   // ⭐ RELATIVE DAY
+
+  if (currentDay > 30) {
+    generateReport();
+    return;
+  }
+
+  let rowCount = parseInt(localStorage.getItem("rowCount")) || 5;
+
+  function createRow() {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="time"></td>
+      <td><input type="text" maxlength="30"></td>
+      <td class="count">0</td>
+      <td class="streak">0</td>
+      ${'<td><input type="checkbox"></td>'.repeat(30)}
+    `;
+    body.appendChild(tr);
+
+    tr.querySelectorAll("input[type=checkbox]").forEach((cb, i) => {
+      if (i + 1 !== currentDay) cb.disabled = true;
+    });
+  }
+
+  for (let i = 0; i < rowCount; i++) createRow();
+
+  document.addEventListener("change", e => {
+    if (e.target.type === "checkbox" && e.target.checked) {
+      e.target.disabled = true;
+      e.target.closest("td").classList.add("done");
+    }
+    updateStats();
+  });
+
+  function updateStats() {
+    document.querySelectorAll("tbody tr").forEach(row => {
+      const boxes = row.querySelectorAll("input[type=checkbox]");
+      let done = 0, streak = 0;
+
+      boxes.forEach(b => { if (b.checked) done++; });
+      for (let i = 0; i < boxes.length; i++) {
+        if (boxes[i].checked) streak++;
+        else break;
+      }
+
+      row.querySelector(".count").textContent = done;
+      row.querySelector(".streak").textContent = streak;
+    });
+
+    if (currentDay === 30) generateReport();
+  }
+
+  function generateReport() {
+    document.getElementById("report").style.display = "block";
+    let completed = 0, total = 0, habits = [];
+
+    document.querySelectorAll("tbody tr").forEach(row => {
+      const name = row.querySelector("input[type=text]").value || "Habit";
+      const count = +row.querySelector(".count").textContent;
+      completed += count;
+      total += 30;
+      habits.push({ name, count });
+    });
+
+    drawPie(completed, total - completed);
+    drawBar(habits);
+
+    const pct = Math.round((completed / total) * 100);
+    document.getElementById("summary").innerHTML =
+      `Completion: ${completed}/${total} (${pct}%)<br>` +
+      (pct >= 80 ? "🏆 Excellent consistency!" :
+       pct >= 50 ? "👍 Good effort!" :
+       "⚠️ Needs improvement.");
+  }
+
+  function drawPie(done, miss) {
+    const c = document.getElementById("pie").getContext("2d");
+    const total = done + miss;
+    let angle = 0;
+    [[done,"#2ecc71"],[miss,"#e74c3c"]].forEach(v => {
+      c.beginPath();
+      c.moveTo(150,100);
+      c.fillStyle = v[1];
+      c.arc(150,100,80,angle,angle + 2 * Math.PI * (v[0] / total));
+      c.fill();
+      angle += 2 * Math.PI * (v[0] / total);
+    });
+  }
+
+  function drawBar(data) {
+    const c = document.getElementById("bar").getContext("2d");
+    c.clearRect(0,0,500,250);
+    data.forEach((h,i) => {
+      c.fillStyle = "#2ecc71";
+      c.fillRect(i * 40 + 40, 250 - h.count * 5, 30, h.count * 5);
+      c.fillStyle = "white";
+      c.fillText(h.name.slice(0,5), i * 40 + 40, 245);
+    });
+  }
+
+  addBtn.onclick = () => {
+    rowCount++;
+    localStorage.setItem("rowCount", rowCount);
+    createRow();
+  };
+
+  removeBtn.onclick = () => {
+    if (rowCount <= 1) return;
+    body.lastElementChild.remove();
+    rowCount--;
+    localStorage.setItem("rowCount", rowCount);
+  };
+});
+</script>
+
+</body>
+</html>
