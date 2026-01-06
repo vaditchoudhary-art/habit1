@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>HABIT TRACKER</title>
+
+<style>
+body {
+  background:#131a19;
+  color:white;
+  font-family:Arial, sans-serif;
+}
+
+h1,h2 { font-weight:bold; }
+
+/* Buttons */
+.controls button {
+  background:#2ecc71;
+  border:none;
+  padding:6px 12px;
+  margin:4px;
+  font-weight:bold;
+  cursor:pointer;
+}
+button.remove { background:#e74c3c; }
+button.days { background:#3498db; }
+
+/* Table */
+table {
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+
+th, td {
+  border:1px solid #444;
+  padding:6px;
+  text-align:center;
+  font-weight:bold;
+}
+
+/* Column sizes */
+th.time, td.time { width:6%; }
+th.task, td.task { width:22%; }
+th.done, td.doneCol { width:5%; }
+th.streak, td.streakCol { width:6%; }
+
+td:nth-child(odd), th:nth-child(odd) { background:#1e1e1e; }
+td:nth-child(even), th:nth-child(even) { background:#323332; }
+
+input[type="text"], input[type="time"] {
+  background:transparent;
+  border:none;
+  color:white;
+  width:100%;
+  font-weight:bold;
+  text-align:left;
+}
+
+input[type="checkbox"]:checked { accent-color:#2ecc71; }
+
+.done { background:#1f3d2b !important; }
+</style>
+</head>
+
+<body>
+
+<h1>HABIT TRACKER</h1>
+
+<div class="controls">
+  <button class="days" data-days="7">7 Days</button>
+  <button class="days" data-days="15">15 Days</button>
+  <button class="days" data-days="30">30 Days</button>
+  <br>
+  <button id="addRow">➕ Add Habit</button>
+  <button id="removeRow" class="remove">➖ Remove Habit</button>
+</div>
+
+<table id="tracker">
+<thead id="thead"></thead>
+<tbody id="tableBody"></tbody>
+</table>
+
+<div id="report" style="display:none;">
+  <h2>📊 Final Report</h2>
+  <p id="summary"></p>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+
+  const body = document.getElementById("tableBody");
+  const thead = document.getElementById("thead");
+  const addBtn = document.getElementById("addRow");
+  const removeBtn = document.getElementById("removeRow");
+
+  let totalDays = parseInt(localStorage.getItem("totalDays")) || 30;
+  let rowCount = parseInt(localStorage.getItem("rowCount")) || 5;
+
+  let startDate = localStorage.getItem("habitStartDate");
+  if (!startDate) {
+    startDate = new Date().toISOString();
+    localStorage.setItem("habitStartDate", startDate);
+  }
+
+  function getCurrentDay() {
+    const diff = Math.floor((new Date() - new Date(startDate)) / 86400000);
+    return diff + 1;
+  }
+
+  function buildHeader() {
+    thead.innerHTML = "";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <th class="time">Time</th>
+      <th class="task">Task</th>
+      <th class="done">Done</th>
+      <th class="streak">Streak 🔥</th>
+      ${Array.from({length: totalDays}, (_,i)=>`<th>D${i+1}</th>`).join("")}
+    `;
+    thead.appendChild(tr);
+  }
+
+  function createRow() {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td class="time"><input type="time"></td>
+      <td class="task"><input type="text" maxlength="60"></td>
+      <td class="doneCol count">0</td>
+      <td class="streakCol streak">0</td>
+      ${'<td><input type="checkbox"></td>'.repeat(totalDays)}
+    `;
+    body.appendChild(tr);
+    lockDays(tr);
+    updateStats();
+  }
+
+  function lockDays(row) {
+    const today = getCurrentDay();
+    row.querySelectorAll("input[type=checkbox]").forEach((cb,i)=>{
+      if (i+1 !== today) cb.disabled = true;
+    });
+  }
+
+  function updateStats() {
+    document.querySelectorAll("tbody tr").forEach(row=>{
+      const boxes = row.querySelectorAll("input[type=checkbox]");
+      let done = 0, streak = 0;
+
+      boxes.forEach(b=>{ if(b.checked) done++; });
+      for(let i=0;i<boxes.length;i++){
+        if(boxes[i].checked) streak++;
+        else break;
+      }
+
+      row.querySelector(".count").textContent = done;
+      row.querySelector(".streak").textContent = streak;
+    });
+
+    if (getCurrentDay() > totalDays) showReport();
+  }
+
+  function showReport() {
+    document.getElementById("report").style.display = "block";
+    document.getElementById("summary").textContent =
+      `You completed a ${totalDays}-day challenge. Review your consistency and streaks above.`;
+  }
+
+  function resetChallenge(days) {
+    localStorage.clear();
+    totalDays = days;
+    rowCount = 5;
+    startDate = new Date().toISOString();
+
+    localStorage.setItem("totalDays", days);
+    localStorage.setItem("rowCount", rowCount);
+    localStorage.setItem("habitStartDate", startDate);
+
+    body.innerHTML = "";
+    buildHeader();
+    for(let i=0;i<rowCount;i++) createRow();
+  }
+
+  /* Initial Load */
+  buildHeader();
+  for(let i=0;i<rowCount;i++) createRow();
+
+  /* Events */
+  document.addEventListener("change", e=>{
+    if(e.target.type==="checkbox" && e.target.checked){
+      e.target.disabled = true;
+      e.target.closest("td").classList.add("done");
+    }
+    updateStats();
+  });
+
+  addBtn.onclick = ()=>{
+    rowCount++;
+    localStorage.setItem("rowCount", rowCount);
+    createRow();
+  };
+
+  removeBtn.onclick = ()=>{
+    if(rowCount<=1) return;
+    body.lastElementChild.remove();
+    rowCount--;
+    localStorage.setItem("rowCount", rowCount);
+  };
+
+  document.querySelectorAll(".days").forEach(btn=>{
+    btn.onclick = ()=> resetChallenge(parseInt(btn.dataset.days));
+  });
+
+});
+</script>
+
+</body>
+</html>
