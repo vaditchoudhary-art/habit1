@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Habit Tracker</title>
+
+<style>
+body{
+  background:#131a19;
+  color:white;
+  font-family:Arial, sans-serif;
+  overflow-x:auto;
+}
+
+button{
+  margin:4px;
+  padding:6px 10px;
+  cursor:pointer;
+}
+
+table{
+  border-collapse:collapse;
+  width:100%;
+  margin-top:10px;
+}
+
+th,td{
+  border:1px solid #444;
+  padding:6px;
+  text-align:center;
+}
+
+th{
+  background:#222;
+}
+
+.day:nth-child(even){background:#1f1f1f;}
+.day:nth-child(odd){background:#2b2b2b;}
+
+input[type=text]{
+  width:260px;
+  background:#000;
+  color:white;
+  border:none;
+  padding:4px;
+}
+
+input[type=time]{
+  background:#000;
+  color:white;
+  border:none;
+}
+
+.streak{
+  font-weight:bold;
+}
+
+#report{
+  display:none;
+  margin-top:20px;
+  padding:10px;
+  background:#1e1e1e;
+}
+</style>
+</head>
+
+<body>
+
+<h2>Habit Tracker</h2>
+
+<button onclick="setDays(7)">7 Days</button>
+<button onclick="setDays(15)">15 Days</button>
+<button onclick="setDays(30)">30 Days</button>
+<button onclick="addRow()">+ Add Task</button>
+<button onclick="removeRow()">− Remove Task</button>
+
+<table id="tracker"></table>
+
+<div id="report"></div>
+
+<script>
+let totalDays = 30;
+let startDate = localStorage.getItem("startDate") || new Date().toISOString();
+
+function autoReset(){
+  const nowMonth = new Date().getMonth();
+  const savedMonth = localStorage.getItem("month");
+
+  if(savedMonth === null){
+    localStorage.setItem("month", nowMonth);
+    localStorage.setItem("startDate", startDate);
+    return;
+  }
+
+  if(parseInt(savedMonth) !== nowMonth){
+    localStorage.clear();
+    localStorage.setItem("month", nowMonth);
+    localStorage.setItem("startDate", new Date().toISOString());
+    location.reload();
+  }
+}
+
+function dayNumber(){
+  const start = new Date(startDate);
+  const today = new Date();
+  const diff = Math.floor((today - start)/(1000*60*60*24));
+  return Math.min(diff+1, totalDays);
+}
+
+function setDays(d){
+  totalDays=d;
+  buildTable();
+  loadData();
+}
+
+function buildTable(){
+  const table=document.getElementById("tracker");
+  table.innerHTML="";
+
+  let header="<tr><th>Time</th><th>Task</th>";
+  for(let i=1;i<=totalDays;i++) header+=`<th>Day ${i}</th>`;
+  header+="<th>Streak</th></tr>";
+  table.innerHTML+=header;
+
+  for(let r=0;r<5;r++) addRow(false);
+
+  applyDayLock();
+}
+
+function addRow(save=true){
+  const table=document.getElementById("tracker");
+  const tr=document.createElement("tr");
+
+  let html=`<td><input type="time"></td>
+            <td><input type="text" placeholder="Task"></td>`;
+  for(let i=0;i<totalDays;i++){
+    html+=`<td class="day"><input type="checkbox"></td>`;
+  }
+  html+=`<td class="streak">0</td>`;
+  tr.innerHTML=html;
+  table.appendChild(tr);
+
+  applyDayLock();
+  if(save) saveData();
+}
+
+function removeRow(){
+  const table=document.getElementById("tracker");
+  if(table.rows.length>2){
+    table.deleteRow(-1);
+    saveData();
+  }
+}
+
+function updateStreak(row){
+  let streak=0;
+  row.querySelectorAll(".day input").forEach(cb=>{
+    if(cb.checked) streak++;
+  });
+  row.querySelector(".streak").innerText=streak;
+}
+
+function applyDayLock(){
+  const today=dayNumber();
+
+  document.querySelectorAll("#tracker tr").forEach((row,i)=>{
+    if(i===0) return;
+
+    row.querySelectorAll(".day input").forEach((cb,d)=>{
+      cb.disabled = (d+1)!==today;
+      cb.onchange=()=>{
+        updateStreak(row);
+        saveData();
+        checkFinalReport();
+      };
+    });
+
+    row.querySelector("input[type=time]").onchange=saveData;
+    row.querySelector("input[type=text]").oninput=saveData;
+  });
+}
+
+function saveData(){
+  const data={totalDays,startDate,rows:[]};
+
+  document.querySelectorAll("#tracker tr").forEach((row,i)=>{
+    if(i===0) return;
+    data.rows.push({
+      time:row.querySelector("input[type=time]").value,
+      task:row.querySelector("input[type=text]").value,
+      checks:[...row.querySelectorAll(".day input")].map(c=>c.checked)
+    });
+  });
+
+  localStorage.setItem("habitData", JSON.stringify(data));
+}
+
+function loadData(){
+  const saved=localStorage.getItem("habitData");
+  if(!saved) return;
+
+  const data=JSON.parse(saved);
+  totalDays=data.totalDays || totalDays;
+  startDate=data.startDate || startDate;
+
+  buildTable();
+
+  data.rows.forEach((r,i)=>{
+    const row=document.querySelectorAll("#tracker tr")[i+1];
+    if(!row) return;
+
+    row.querySelector("input[type=time]").value=r.time;
+    row.querySelector("input[type=text]").value=r.task;
+    row.querySelectorAll(".day input").forEach((cb,j)=>{
+      cb.checked=r.checks[j];
+    });
+    updateStreak(row);
+  });
+}
+
+function checkFinalReport(){
+  if(dayNumber()!==totalDays) return;
+
+  let done=0,total=0;
+  document.querySelectorAll(".day input").forEach(cb=>{
+    if(!cb.disabled){
+      total++;
+      if(cb.checked) done++;
+    }
+  });
+
+  document.getElementById("report").style.display="block";
+  document.getElementById("report").innerHTML=
+    `<h3>Final Report</h3>
+     <p>Completion: ${done}/${total}</p>
+     <p>${Math.round((done/total)*100)}% habits completed</p>`;
+}
+
+autoReset();
+buildTable();
+loadData();
+</script>
+
+</body>
+  </html>
