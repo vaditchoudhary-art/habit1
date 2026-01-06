@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Habit Tracker</title>
+
+<style>
+body {
+  background:#131a19;
+  color:white;
+  font-family: Arial, sans-serif;
+}
+
+h1 { text-align:center; }
+
+.controls {
+  text-align:center;
+  margin-bottom:10px;
+}
+
+button {
+  padding:6px 12px;
+  margin:4px;
+  font-weight:bold;
+  cursor:pointer;
+}
+
+.table-wrap {
+  overflow-x:auto;
+}
+
+table {
+  border-collapse: collapse;
+  table-layout: fixed;
+  min-width: 900px;
+}
+
+th, td {
+  border:1px solid #444;
+  padding:6px;
+  text-align:center;
+  font-weight:bold;
+  white-space:nowrap;
+}
+
+th.time, td.time { width:80px; }
+th.task, td.task { width:280px; }
+th.streak, td.streakCol { width:80px; }
+th.day, td.day { width:45px; }
+
+input[type="text"], input[type="time"] {
+  width:100%;
+  background:#222;
+  color:white;
+  border:none;
+  font-weight:bold;
+}
+
+input[type="checkbox"] {
+  transform: scale(1.2);
+}
+
+.disabled {
+  opacity:0.4;
+  pointer-events:none;
+}
+
+#report {
+  margin-top:30px;
+  display:none;
+  background:#1e1e1e;
+  padding:15px;
+}
+</style>
+</head>
+
+<body>
+
+<h1>HABIT TRACKER</h1>
+
+<div class="controls">
+  <button onclick="setDays(7)">7 Days</button>
+  <button onclick="setDays(15)">15 Days</button>
+  <button onclick="setDays(30)">30 Days</button>
+  <button onclick="addRow()">➕ Add Row</button>
+  <button onclick="removeRow()">➖ Remove Row</button>
+  <button onclick="generateReport()">📊 Final Report</button>
+</div>
+
+<div class="table-wrap">
+<table id="tracker"></table>
+</div>
+
+<div id="report">
+  <h2>Monthly Report</h2>
+  <canvas id="pie" height="200"></canvas>
+  <canvas id="bar" height="200"></canvas>
+  <p id="textReport"></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+let totalDays = 30;
+let startDate = localStorage.startDate || new Date().toDateString();
+localStorage.startDate = startDate;
+
+function currentDay() {
+  return Math.min(
+    totalDays,
+    Math.floor((new Date() - new Date(startDate)) / 86400000) + 1
+  );
+}
+
+function setDays(d) {
+  totalDays = d;
+  buildTable();
+}
+
+function buildTable() {
+  const table = document.getElementById("tracker");
+  table.innerHTML = "";
+
+  let head = "<tr><th class='time'>Time</th><th class='task'>Task</th>";
+  for (let i=1;i<=totalDays;i++) head+=`<th class="day">D${i}</th>`;
+  head += "<th class='streak'>Streak</th></tr>";
+  table.innerHTML += head;
+
+  for (let i=0;i<5;i++) addRow();
+}
+
+function addRow() {
+  const table = document.getElementById("tracker");
+  const row = document.createElement("tr");
+
+  row.innerHTML = `
+    <td class="time"><input type="time"></td>
+    <td class="task"><input type="text" maxlength="50"></td>
+    ${Array.from({length:totalDays},()=>`<td class="day"><input type="checkbox"></td>`).join("")}
+    <td class="streakCol">0</td>
+  `;
+
+  table.appendChild(row);
+  applyDayLock();
+}
+
+function removeRow() {
+  const table = document.getElementById("tracker");
+  if (table.rows.length > 2) table.deleteRow(-1);
+}
+
+function applyDayLock() {
+  const today = currentDay();
+  document.querySelectorAll("tr").forEach((row,r)=>{
+    if (r===0) return;
+    row.querySelectorAll(".day input").forEach((cb,i)=>{
+      cb.disabled = i+1 !== today;
+      cb.onchange = ()=>updateStreak(row);
+    });
+  });
+}
+
+function updateStreak(row) {
+  let streak=0;
+  row.querySelectorAll(".day input").forEach(cb=>{
+    if(cb.checked) streak++;
+  });
+  row.querySelector(".streakCol").textContent = streak;
+}
+
+function autoReset() {
+  const savedMonth = localStorage.month;
+  const nowMonth = new Date().getMonth();
+  if (savedMonth!=nowMonth) {
+    localStorage.clear();
+    location.reload();
+  }
+  localStorage.month = nowMonth;
+}
+
+function generateReport() {
+  document.getElementById("report").style.display="block";
+
+  let total=0, done=0;
+  document.querySelectorAll(".day input").forEach(cb=>{
+    total++;
+    if(cb.checked) done++;
+  });
+
+  new Chart(pie,{
+    type:"pie",
+    data:{labels:["Done","Missed"],datasets:[{data:[done,total-done]}]}
+  });
+
+  let streaks=[...document.querySelectorAll(".streakCol")].map(s=>+s.textContent);
+  new Chart(bar,{
+    type:"bar",
+    data:{labels:streaks.map((_,i)=>"Task "+(i+1)),
+    datasets:[{data:streaks}]}
+  });
+
+  document.getElementById("textReport").textContent =
+    `Completion: ${done}/${total} (${Math.round(done/total*100)}%)`;
+}
+
+autoReset();
+buildTable();
+</script>
+
+</body>
+</html>
